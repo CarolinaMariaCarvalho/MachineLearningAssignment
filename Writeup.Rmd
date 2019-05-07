@@ -1,0 +1,56 @@
+#Prediction Assignment Writeup
+
+##Executive Summary
+
+Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively. The data analysed in the report come from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways, and their movement was classified in 1 of 5 classes. Three different models were fitted to the a subset comprised of 70% of the provided data, a random forest, a linear discriminant analysis (LDA) and a generalized additive model (GAM). These models were then used to predict the movement class for the remaining 30% of the data, and the accuracy of each prediction was measured by comparison with the orignal values of this final test set. The random forest model should be adopted for future predictions, since it outperforms the other models by far, with 99% out of sample accuracy.
+
+##Loading and processng data
+
+After loading the "pml_training.csv" dataset, since there is no test dataset available, in order to be able to perform cross validation on the prediction model, the training dataset provided was divided into two subsets, "train" and "test", using the createDataPartition function, leaving 70% of observation in the "train" set and the remaining 30% in the "test" set. 
+The dataset has a very large number of variables, so the next steps are taken in order to remove unnecessary variables form the model. First of all, using the select function in the dplyr package, the first seven variables are removed, since they identify observations and have no predictive value. Secondly, since several columns which present an NA value in the head rows seem to be almost entirely made up by NA values, these are removed as well. Finally, the nearZeroVar is used to single out variables with variance equal or close to zero, and these are removed as well. All these operations are performed in both the "train" and "test" set.
+
+```{r loading and processing data, results='hide'}
+library(caret)
+training<-read.csv("pml-training.csv")
+inTrain<-createDataPartition(training$classe,p=0.7,list=FALSE)
+train<-training[inTrain,]
+test<-training[-inTrain,]
+library(dplyr)
+train<-select(train,-c(X,user_name,raw_timestamp_part_1,raw_timestamp_part_2,cvtd_timestamp,new_window,num_window))
+test<-select(test,-c(X,user_name,raw_timestamp_part_1,raw_timestamp_part_2,cvtd_timestamp,new_window,num_window))
+train<-train[,!is.na(train[5,])]
+test<-test[,!is.na(test[5,])]
+nzv<-nearZeroVar(train,saveMetrics=TRUE)
+train<-train[,nzv$nzv==FALSE]
+nzv2<-nearZeroVar(test,saveMetrics=TRUE)
+test<-test[,nzv2$nzv==FALSE]
+```
+
+##Model Building and Prediction
+
+Two different machine learning algorithms were used to build two different prediciton models for the "classe" variable. Random forests and boosting are generally the most successful models, but since the computer where this analysis was performed has no computational ability to perform the model fitting for a boosting algorithm, even after the reduction in the number of predictors, the next best approach was selected, so the two chosen algorithms were random forests and linear discriminant analysis. 
+The random forest model was generated using the randomForest function in the randomForest package, and the LDA model was generated through the train function in the caret package.
+A combined model combining the previous two was also produced through a Generalized Additive Model, using the train function.
+The models were used to generate three diffenrent predictions for the values in the "test" set. 
+
+```{r model building and prediciton}
+library(randomForest)
+model1<-randomForest(classe~.,data=train)
+pred1<-predict(model1,test)
+model2<-train(classe~.,method="lda",data=train)
+pred2<-predict(model2,test)
+predDF<-data.frame(pred1,pred2,classe=test$classe)
+model3<-train(classe~.,method="gam",data=predDF)
+pred3<-predict(model3,test)
+```
+
+To evaluate the models, confusion matrices were calculated for each predicted set of values using the confusionMatrix function in the caret package.
+
+```{r model evaluation}
+confusionMatrix(pred1,test$classe)
+confusionMatrix(pred2,test$classe)
+confusionMatrix(pred3,test$classe)
+```
+
+From the accuracy values, we can see that the random forest model performs far better than the linear discriminant analysis, with 99% accuracy for the random forest versus 70% accuracy for the LDA. The combined model perform far worse than the separate models, with only 58% accuracy. 
+So we can can conclude that the first model should provide an accurate prediction of the type of movement performed by an individual using the same set of accelerometers the participants used in this study.
